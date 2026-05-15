@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Órbita - Planner</title>
+  
+  <meta name="theme-color" content="#F9FAFB">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/png" href="./icons/icon-512.png">
+
+  <style>
+    :root {
+      --bg: #F9FAFB; --card-bg: #FFFFFF; --accent: #2563EB;
+      --text: #1F2937; --text-sec: #6B7280; --border: #E5E7EB;
+      --red: #EF4444; --yellow: #F59E0B; --blue: #3B82F6;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    
+    /* Destravamos o vertical para o arrastar-para-atualizar voltar a funcionar */
+    body { background: var(--bg); color: var(--text); height: 100vh; display: flex; flex-direction: column; }
+
+    /* Banners */
+    #backup-banner { display: none; background: #FEF2F2; color: #991B1B; padding: 8px; text-align: center; font-size: 0.8rem; font-weight: 600; }
+    #install-banner { display: none; background: var(--card-bg); padding: 12px 1rem; border-bottom: 1px solid var(--border); align-items: center; justify-content: space-between; z-index: 50; }
+    .btn-install { background: var(--accent); color: white; border: none; padding: 6px 12px; border-radius: 6px; font-weight: bold; cursor: pointer; }
+
+    /* Header Infinito */
+    header { padding: 1rem; background: var(--card-bg); border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    h1 { font-size: 1.2rem; color: var(--accent); display: flex; align-items: center; gap: 8px; margin: 0; }
+    h1 svg { width: 28px; height: 28px; border-radius: 6px; background: #EEF2FF; padding: 2px; }
+    .week-controls { display: flex; align-items: center; gap: 10px; font-weight: bold; color: var(--text); font-size: 0.9rem; }
+    .btn-nav { background: var(--border); border: none; border-radius: 6px; padding: 5px 10px; cursor: pointer; color: var(--text-sec); font-weight: bold; }
+    .btn-nav:hover { background: var(--accent); color: white; }
+
+    /* Nav Dias com Datas */
+    .week-nav { display: flex; justify-content: space-between; padding: 0.5rem 1rem; background: var(--card-bg); box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+    .day-tab { display: flex; flex-direction: column; align-items: center; color: var(--text-sec); font-weight: 600; font-size: 0.9rem; cursor: pointer; position: relative; padding: 5px; }
+    .day-tab.active { color: var(--accent); transform: scale(1.05); }
+    .date-sub { font-size: 0.65rem; color: #9CA3AF; margin-top: 2px; }
+    .vol-badge { position: absolute; top: -5px; right: -12px; background: var(--border); color: var(--text-sec); font-size: 0.6rem; padding: 2px 5px; border-radius: 10px; font-weight: bold; }
+    .day-tab.has-tasks .vol-badge { background: var(--accent); color: white; }
+
+    /* Board (Apenas Carrossel agora) */
+    #board { flex-grow: 1; overflow-y: auto; overflow-x: auto; padding-bottom: 80px; display: flex; scroll-snap-type: x mandatory; scroll-behavior: smooth; }
+    .day-col { min-width: 100vw; padding: 1rem; scroll-snap-align: start; }
+    .day-title { font-size: 1rem; font-weight: 700; margin-bottom: 1rem; color: var(--text); border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; display: flex; justify-content: space-between; align-items: center; }
+    
+    /* Blocos de Tempo & Tasks */
+    .time-block { margin-bottom: 1.5rem; }
+    .time-label { font-size: 0.8rem; font-weight: bold; color: var(--text-sec); margin-bottom: 0.8rem; display: flex; align-items: center; gap: 5px; }
+    .task-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+    
+    @media (min-width: 768px) {
+      .task-grid { grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); }
+      .task { aspect-ratio: auto; } /* Removido o quadrado estrito para manter legibilidade no desktop sem pinça */
+    }
+
+    .task { background: var(--card-bg); border: 1px solid var(--border); padding: 1rem; border-radius: 12px; box-shadow: 0 2px 4px rgba(0,0,0,0.02); display: flex; flex-direction: column; gap: 0.5rem; position: relative; }
+    .task.done { opacity: 0.6; }
+    .task.done .md-content { text-decoration: line-through; }
+    .task-header { display: flex; align-items: flex-start; gap: 10px; flex-grow: 1; }
+    .checkbox { width: 22px; height: 22px; border: 2px solid var(--border); border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; flex-shrink: 0; margin-top: 2px; }
+    .task.done .checkbox { background: var(--accent); border-color: var(--accent); }
+    .task.done .checkbox::after { content: '✓'; color: white; font-size: 12px; }
+    
+    .task-content { width: 100%; overflow-x: hidden; }
+    .md-content { font-size: 0.9rem; line-height: 1.4; word-wrap: break-word; }
+    .md-content strong { color: var(--accent); }
+    .md-content em { color: var(--text-sec); }
+    .task-img { max-width: 100%; max-height: 120px; border-radius: 8px; margin-top: 8px; object-fit: cover; border: 1px solid var(--border); }
+    
+    .task-meta { font-size: 0.7rem; color: var(--text-sec); display: flex; gap: 5px; margin-top: auto; align-items: center; flex-wrap: wrap; padding-top: 10px; border-top: 1px dashed var(--border); }
+    .cat-badge { padding: 2px 6px; border-radius: 8px; font-weight: bold; }
+    .routine-icon { font-size: 0.8rem; color: var(--accent); }
+    .prio-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; position: absolute; top: 15px; right: 15px; }
+    .prio-Alta { background: var(--red); box-shadow: 0 0 5px var(--red); } .prio-Media { background: var(--yellow); } .prio-Baixa { background: var(--blue); }
+    
+    .task-actions { display: flex; justify-content: space-between; margin-top: 5px; }
+    .btn-icon { background: none; border: none; color: var(--text-sec); font-size: 1.1rem; padding: 5px; cursor: pointer; }
+
+    .fab { position: fixed; bottom: 20px; right: 20px; background: var(--accent); color: white; width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 24px; border: none; cursor: pointer; box-shadow: 0 4px 12px rgba(37,99,235,0.4); z-index: 10; }
+
+    /* Modais */
+    .modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 100; align-items: flex-end; justify-content: center; }
+    .modal-content { background: var(--card-bg); width: 100%; max-width: 500px; border-radius: 20px 20px 0 0; padding: 1.5rem; max-height: 90vh; overflow-y: auto; animation: slideUp 0.3s ease-out; }
+    @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+    
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-size: 0.8rem; font-weight: bold; margin-bottom: 5px; color: var(--text-sec); }
+    .modal input, .modal select, .modal textarea { width: 100%; padding: 0.8rem; border: 1px solid var(--border); border-radius: 8px; font-size: 1rem; background: var(--bg); }
+    .modal textarea { min-height: 100px; resize: vertical; }
+    
+    .row { display: flex; gap: 10px; }
+    .row > * { flex: 1; }
+
+    .btn-block { width: 100%; padding: 1rem; background: var(--accent); color: white; border: none; border-radius: 8px; font-weight: bold; cursor: pointer; margin-top: 10px; }
+    .btn-sec { background: var(--border); color: var(--text); }
+
+    /* Rotinas & Dias da Semana Checkbox */
+    .days-selector { display: flex; gap: 5px; margin-top: 5px; flex-wrap: wrap; }
+    .day-check { display: none; }
+    .day-lbl { padding: 5px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 20px; font-size: 0.8rem; cursor: pointer; color: var(--text-sec); }
+    .day-check:checked + .day-lbl { background: var(--accent); color: white; border-color: var(--accent); }
+    
+    .routine-item { background: var(--bg); border: 1px solid var(--border); padding: 10px; border-radius: 8px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; }
+    .routine-info h4 { margin: 0 0 5px 0; font-size: 0.95rem; }
+    .routine-info p { margin: 0; font-size: 0.75rem; color: var(--text-sec); }
+  </style>
+</head>
+<body>
+
+  <div id="backup-banner">⚠️ Faz mais de 7 dias desde o último backup. Exporte seus dados!</div>
+  <div id="install-banner">
+    <div style="font-size:0.85rem; font-weight:600;">📱 Adicione o Órbita à tela inicial</div>
+    <button id="btn-install-app" class="btn-install">Instalar</button>
+  </div>
+
+  <header>
+    <h1>
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+        <ellipse cx="50" cy="50" rx="35" ry="12" fill="none" stroke="#2563EB" stroke-width="4" transform="rotate(-20 50 50)" opacity="0.4"/>
+        <circle cx="50" cy="50" r="16" fill="#2563EB" />
+        <circle cx="83" cy="38" r="7" fill="#F59E0B" />
+      </svg>
+      Órbita
+    </h1>
+    <div class="week-controls">
+      <button class="btn-nav" onclick="shiftWeek(-1)">◀</button>
+      <span id="week-label">...</span>
+      <button class="btn-nav" onclick="shiftWeek(1)">▶</button>
+    </div>
+    <button class="btn-icon" onclick="openSettings()">⚙️</button>
+  </header>
+
+  <nav class="week-nav" id="week-nav"></nav>
+  <main id="board"></main>
+
+  <button class="fab" onclick="openTaskModal()">+</button>
+
+  <div class="modal" id="task-modal" onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-content">
+      <h2 id="modal-title" style="margin-bottom:1rem;">Nova Tarefa</h2>
+      <input type="hidden" id="task-id">
+      <input type="hidden" id="task-routine-id">
+      
+      <div class="form-group">
+        <label>Descrição</label>
+        <textarea id="task-desc" placeholder="O que precisa ser feito?"></textarea>
+      </div>
+      
+      <div class="row">
+        <div class="form-group">
+          <label>Data Início / Exata</label>
+          <input type="date" id="task-date">
+        </div>
+        <div class="form-group">
+          <label>Horário</label>
+          <input type="time" id="task-time">
+        </div>
+      </div>
+
+      <div class="form-group" id="repetition-group">
+        <label>Repetição (Rotina)</label>
+        <select id="task-recurrence" onchange="toggleDaysSelector()">
+          <option value="none">Não se repete</option>
+          <option value="daily">Todos os dias</option>
+          <option value="weekly">Semanalmente (Mesmo dia da data)</option>
+          <option value="monthly">Mensalmente (Mesmo dia do mês)</option>
+          <option value="custom">Dias específicos da semana</option>
+        </select>
+        
+        <div class="days-selector" id="custom-days" style="display:none;">
+          <input type="checkbox" id="d1" value="1" class="day-check"><label for="d1" class="day-lbl">Seg</label>
+          <input type="checkbox" id="d2" value="2" class="day-check"><label for="d2" class="day-lbl">Ter</label>
+          <input type="checkbox" id="d3" value="3" class="day-check"><label for="d3" class="day-lbl">Qua</label>
+          <input type="checkbox" id="d4" value="4" class="day-check"><label for="d4" class="day-lbl">Qui</label>
+          <input type="checkbox" id="d5" value="5" class="day-check"><label for="d5" class="day-lbl">Sex</label>
+          <input type="checkbox" id="d6" value="6" class="day-check"><label for="d6" class="day-lbl">Sáb</label>
+          <input type="checkbox" id="d0" value="0" class="day-check"><label for="d0" class="day-lbl">Dom</label>
+        </div>
+        <small style="color:var(--text-sec); display:block; margin-top:5px; font-size:0.7rem;">Rotinas são geradas automaticamente até 8 semanas no futuro.</small>
+      </div>
+
+      <div class="row">
+        <div class="form-group">
+          <label>Categoria</label>
+          <select id="task-cat"></select>
+        </div>
+        <div class="form-group">
+          <label>Prioridade</label>
+          <select id="task-prio">
+            <option value="Alta">🔴 Alta</option><option value="Media" selected>🟡 Média</option><option value="Baixa">🔵 Baixa</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn-block" onclick="saveTask()">Salvar</button>
+      <button class="btn-block btn-sec" onclick="document.getElementById('task-modal').style.display='none'">Cancelar</button>
+    </div>
+  </div>
+
+  <div class="modal" id="settings-modal" onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-content">
+      <h2 style="margin-bottom:1rem;">Configurações</h2>
+      
+      <button class="btn-block" style="background:#8B5CF6; margin-bottom:1rem;" onclick="openRoutinesModal()">🔄 Gerenciar Rotinas</button>
+
+      <div style="background: var(--bg); padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+        <h3 style="font-size:1rem; margin-bottom:10px;">Categorias</h3>
+        <div id="cat-list" style="margin-bottom:10px;"></div>
+        <div class="row">
+          <input type="text" id="new-cat-name" placeholder="Nova">
+          <input type="color" id="new-cat-color" value="#2563EB" style="width:50px; padding:0;">
+          <button class="btn-sec" style="padding:0 15px; border-radius:8px;" onclick="addCategory()">+</button>
+        </div>
+      </div>
+
+      <button class="btn-block btn-sec" onclick="exportData()">💾 Exportar Backup</button>
+      <label class="btn-block btn-sec" style="display:block; text-align:center; cursor:pointer;">
+        📂 Importar Backup <input type="file" style="display:none;" accept=".json" onchange="importData(event)">
+      </label>
+      <button class="btn-block btn-sec" style="margin-top:20px;" onclick="document.getElementById('settings-modal').style.display='none'">Fechar</button>
+    </div>
+  </div>
+
+  <div class="modal" id="routines-modal" onclick="if(event.target===this) this.style.display='none'">
+    <div class="modal-content">
+      <h2 style="margin-bottom:1rem;">Gerenciar Rotinas</h2>
+      <p style="font-size:0.8rem; color:var(--text-sec); margin-bottom:1rem;">Edite as regras de repetição daqui pra frente. O seu histórico passado continuará intacto.</p>
+      
+      <div id="routines-list"></div>
+      
+      <button class="btn-block btn-sec" style="margin-top:20px;" onclick="document.getElementById('routines-modal').style.display='none'">Voltar</button>
+    </div>
+  </div>
+
+  <script>
+    const daysStr = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado', 'Domingo'];
+    
+    // --- ESTADO GLOBAL ---
+    let appData = JSON.parse(localStorage.getItem('orbita_v4')) || null;
+    let currentMonday = getMonday(new Date()); 
+    let currentDayIndex = new Date().getDay() === 0 ? 6 : new Date().getDay() - 1;
+
+    // --- INIT ---
+    function initData() {
+      const oldData = JSON.parse(localStorage.getItem('orbita_v3'));
+      if (oldData) {
+        appData = { ...oldData, routines: oldData.routines || [] };
+        localStorage.removeItem('orbita_v3');
+      } else if (!appData) {
+        appData = {
+          lastBackup: Date.now(),
+          categories: [ {id: 'c1', name: 'Trabalho', color: '#3B82F6'}, {id: 'c2', name: 'Casa', color: '#10B981'} ],
+          tasks: [], routines: []
+        };
+      }
+      projectRoutines();
+      saveLocal();
+    }
+
+    // --- UTILITÁRIOS DE DATA ---
+    function getMonday(d) {
+      d = new Date(d);
+      var day = d.getDay(), diff = d.getDate() - day + (day == 0 ? -6:1);
+      return new Date(d.setDate(diff));
+    }
+    function formatShortDate(date) { return String(date.getDate()).padStart(2, '0') + '/' + String(date.getMonth() + 1).padStart(2, '0'); }
+    function getDatesForCurrentWeek() {
+      let dates = [];
+      for(let i=0; i<7; i++) { let d = new Date(currentMonday); d.setDate(d.getDate() + i); dates.push(d); }
+      return dates;
+    }
+    function getTodayStr() { return new Date().toISOString().split('T')[0]; }
+
+    // --- MOTOR DE ROTINAS ---
+    function toggleDaysSelector() {
+      const val = document.getElementById('task-recurrence').value;
+      document.getElementById('custom-days').style.display = (val === 'custom') ? 'flex' : 'none';
+    }
+
+    function projectRoutines() {
+      const today = new Date();
+      const horizon = new Date();
+      horizon.setDate(today.getDate() + 56); // 8 Semanas
+      
+      appData.routines.forEach(routine => {
+        let currentIter = new Date(routine.startDate + 'T12:00:00');
+        
+        while (currentIter <= horizon) {
+          const dateStr = currentIter.toISOString().split('T')[0];
+          const taskExists = appData.tasks.some(t => t.routineId === routine.id && t.date === dateStr);
+          
+          if (!taskExists) {
+            let shouldCreate = false;
+            if (routine.type === 'daily') shouldCreate = true;
+            else if (routine.type === 'weekly' && currentIter.getDay() === new Date(routine.startDate + 'T12:00:00').getDay()) shouldCreate = true;
+            else if (routine.type === 'monthly' && currentIter.getDate() === new Date(routine.startDate + 'T12:00:00').getDate()) shouldCreate = true;
+            else if (routine.type === 'custom' && routine.days.includes(currentIter.getDay().toString())) shouldCreate = true;
+
+            if (shouldCreate) {
+              appData.tasks.push({
+                id: 't' + Date.now() + Math.floor(Math.random() * 1000),
+                desc: routine.desc, date: dateStr, time: routine.time,
+                prio: routine.prio, categoryId: routine.categoryId,
+                routineId: routine.id, done: false
+              });
+            }
+          }
+          currentIter.setDate(currentIter.getDate() + 1);
+        }
+      });
+    }
+
+    function regenerateRoutine(routine) {
+      const todayStr = getTodayStr();
+      appData.tasks = appData.tasks.filter(t => {
+        if (t.routineId === routine.id && t.date >= todayStr && !t.done) return false;
+        return true;
+      });
+      routine.startDate = todayStr;
+      projectRoutines();
+      saveLocal();
+    }
+
+    function openRoutinesModal() {
+      const list = document.getElementById('routines-list');
+      if(appData.routines.length === 0) {
+        list.innerHTML = '<p style="color:var(--text-sec); font-size:0.9rem;">Nenhuma rotina criada ainda.</p>';
+      } else {
+        list.innerHTML = appData.routines.map(r => {
+          let freqStr = { daily: 'Diário', weekly: 'Semanal', monthly: 'Mensal', custom: 'Dias Específicos' }[r.type];
+          return `<div class="routine-item">
+            <div class="routine-info">
+              <h4>${r.desc}</h4>
+              <p>🔄 ${freqStr} | ⏰ ${r.time || 'Integral'}</p>
+            </div>
+            <div>
+              <button class="btn-icon" onclick="editRoutineForm('${r.id}')">✏️</button>
+              <button class="btn-icon" onclick="deleteRoutine('${r.id}')" style="color:var(--red);">🗑️</button>
+            </div>
+          </div>`;
+        }).join('');
+      }
+      document.getElementById('settings-modal').style.display = 'none';
+      document.getElementById('routines-modal').style.display = 'flex';
+    }
+
+    function deleteRoutine(id) {
+      if(confirm("Parar a repetição? As tarefas futuras não concluídas serão apagadas. O histórico será mantido.")) {
+        const todayStr = getTodayStr();
+        appData.routines = appData.routines.filter(r => r.id !== id);
+        appData.tasks = appData.tasks.filter(t => !(t.routineId === id && t.date >= todayStr && !t.done));
+        saveLocal();
+        openRoutinesModal();
+      }
+    }
+
+    function editRoutineForm(id) {
+      const r = appData.routines.find(x => x.id === id);
+      document.getElementById('task-id').value = ''; 
+      document.getElementById('task-routine-id').value = r.id; 
+      
+      document.getElementById('modal-title').innerText = "Editar Rotina";
+      document.getElementById('task-desc').value = r.desc;
+      document.getElementById('task-date').value = r.startDate;
+      document.getElementById('task-time').value = r.time || '';
+      document.getElementById('task-prio').value = r.prio;
+      document.getElementById('task-cat').value = r.categoryId || '';
+      
+      document.getElementById('task-recurrence').value = r.type;
+      toggleDaysSelector();
+      if(r.type === 'custom') {
+        document.querySelectorAll('.day-check').forEach(chk => { chk.checked = r.days.includes(chk.value); });
+      }
+
+      document.getElementById('routines-modal').style.display = 'none';
+      document.getElementById('task-modal').style.display = 'flex';
+    }
+
+    // --- CRUD DE TAREFAS ---
+    function parseMD(text) {
+      if(!text) return '';
+      return text.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>').replace(/\*(.*?)\*/g, '<em>$1</em>').replace(/\n/g, '<br>');
+    }
+
+    function render() {
+      const weekDates = getDatesForCurrentWeek();
+      document.getElementById('week-label').textContent = `${formatShortDate(weekDates[0])} a ${formatShortDate(weekDates[6])}`;
+
+      const nav = document.getElementById('week-nav');
+      nav.innerHTML = daysStr.map((d, i) => {
+        const dateStr = weekDates[i].toISOString().split('T')[0];
+        const dayTasks = appData.tasks.filter(t => t.date === dateStr);
+        return `<div class="day-tab ${i === currentDayIndex ? 'active' : ''} ${dayTasks.length > 0 ? 'has-tasks' : ''}" onclick="scrollToDay(${i})">
+          ${d.substring(0,3)} <div class="date-sub">${formatShortDate(weekDates[i])}</div> <div class="vol-badge">${dayTasks.length}</div>
+        </div>`
+      }).join('');
+
+      const board = document.getElementById('board');
+      board.innerHTML = daysStr.map((d, i) => {
+        const dateStr = weekDates[i].toISOString().split('T')[0];
+        const dayTasks = appData.tasks.filter(t => t.date === dateStr);
+        
+        const blocks = {
+          manha: dayTasks.filter(t => t.time && t.time < '12:00'), tarde: dayTasks.filter(t => t.time && t.time >= '12:00' && t.time < '18:00'),
+          noite: dayTasks.filter(t => t.time && t.time >= '18:00'), integral: dayTasks.filter(t => !t.time)
+        };
+
+        const renderTask = (t) => {
+          const cat = appData.categories.find(c => c.id === t.categoryId);
+          return `<div class="task ${t.done ? 'done' : ''}">
+              <div class="prio-dot prio-${t.prio}"></div>
+              <div class="task-header">
+                <div class="checkbox" onclick="toggleDone('${t.id}')"></div>
+                <div class="task-content">
+                  <div class="md-content">${parseMD(t.desc)}</div>
+                </div>
+              </div>
+              <div class="task-meta">
+                ${t.time ? `<strong>⏰ ${t.time}</strong>` : ''}
+                ${cat ? `<span class="cat-badge" style="background:${cat.color}20; color:${cat.color}">${cat.name}</span>` : ''}
+                ${t.routineId ? `<span class="routine-icon" title="Tarefa Recorrente">🔄</span>` : ''}
+              </div>
+              <div class="task-actions">
+                <button class="btn-icon" onclick="shiftTaskDay('${t.id}', -1)">⬅️</button>
+                <div><button class="btn-icon" onclick="editTask('${t.id}')">✏️</button><button class="btn-icon" onclick="deleteTask('${t.id}')">🗑️</button></div>
+                <button class="btn-icon" onclick="shiftTaskDay('${t.id}', 1)">➡️</button>
+              </div>
+            </div>`;
+        };
+
+        return `<div class="day-col" id="col-${i}">
+          <div class="day-title">${d} <span>${formatShortDate(weekDates[i])}</span></div>
+          ${blocks.integral.length ? `<div class="time-block"><div class="time-label">📅 Tempo Integral</div><div class="task-grid">${blocks.integral.map(renderTask).join('')}</div></div>` : ''}
+          ${blocks.manha.length ? `<div class="time-block"><div class="time-label">🌅 Manhã</div><div class="task-grid">${blocks.manha.map(renderTask).join('')}</div></div>` : ''}
+          ${blocks.tarde.length ? `<div class="time-block"><div class="time-label">☕ Tarde</div><div class="task-grid">${blocks.tarde.map(renderTask).join('')}</div></div>` : ''}
+          ${blocks.noite.length ? `<div class="time-block"><div class="time-label">🌙 Noite</div><div class="task-grid">${blocks.noite.map(renderTask).join('')}</div></div>` : ''}
+          ${dayTasks.length === 0 ? `<p style="color:var(--text-sec); text-align:center; margin-top:2rem; font-size:0.9rem;">Dia livre!</p>` : ''}
+        </div>`
+      }).join('');
+      updateCategorySelects();
+    }
+
+    function saveLocal() { localStorage.setItem('orbita_v4', JSON.stringify(appData)); render(); }
+    function shiftWeek(offset) { currentMonday.setDate(currentMonday.getDate() + (offset * 7)); render(); }
+    function toggleDone(taskId) { const t = appData.tasks.find(x => x.id === taskId); t.done = !t.done; saveLocal(); }
+    
+    function shiftTaskDay(taskId, offset) {
+      const t = appData.tasks.find(x => x.id === taskId);
+      let d = new Date(t.date + 'T12:00:00'); d.setDate(d.getDate() + offset);
+      t.date = d.toISOString().split('T')[0];
+      t.routineId = null; 
+      saveLocal();
+    }
+
+    function deleteTask(taskId) {
+      if(confirm("Excluir tarefa?")) { appData.tasks = appData.tasks.filter(x => x.id !== taskId); saveLocal(); }
+    }
+
+    function openTaskModal() {
+      const targetDate = getDatesForCurrentWeek()[currentDayIndex].toISOString().split('T')[0];
+      document.getElementById('modal-title').innerText = "Nova Tarefa";
+      document.getElementById('task-id').value = '';
+      document.getElementById('task-routine-id').value = '';
+      document.getElementById('task-desc').value = '';
+      document.getElementById('task-date').value = targetDate;
+      document.getElementById('task-time').value = '';
+      document.getElementById('task-recurrence').value = 'none';
+      document.getElementById('repetition-group').style.display = 'block';
+      toggleDaysSelector();
+      document.getElementById('task-modal').style.display = 'flex';
+    }
+
+    function editTask(taskId) {
+      const t = appData.tasks.find(x => x.id === taskId);
+      document.getElementById('modal-title').innerText = "Editar Ocorrência Única";
+      document.getElementById('task-id').value = t.id;
+      document.getElementById('task-routine-id').value = ''; 
+      document.getElementById('task-desc').value = t.desc;
+      document.getElementById('task-date').value = t.date;
+      document.getElementById('task-time').value = t.time || '';
+      document.getElementById('task-prio').value = t.prio;
+      document.getElementById('task-cat').value = t.categoryId || '';
+      document.getElementById('repetition-group').style.display = 'none'; 
+      document.getElementById('task-modal').style.display = 'flex';
+    }
+
+    function saveTask() {
+      const desc = document.getElementById('task-desc').value;
+      const date = document.getElementById('task-date').value;
+      if(!desc || !date) return alert("A descrição e a data são obrigatórias!");
+      
+      const taskId = document.getElementById('task-id').value;
+      const routineEditId = document.getElementById('task-routine-id').value;
+      const recurrence = document.getElementById('task-recurrence').value;
+
+      const baseTask = {
+        desc, date, time: document.getElementById('task-time').value,
+        prio: document.getElementById('task-prio').value,
+        categoryId: document.getElementById('task-cat').value,
+      };
+
+      if (routineEditId) {
+        let r = appData.routines.find(x => x.id === routineEditId);
+        r.desc = baseTask.desc; r.time = baseTask.time; r.prio = baseTask.prio; r.categoryId = baseTask.categoryId;
+        r.type = recurrence;
+        r.days = Array.from(document.querySelectorAll('.day-check:checked')).map(cb => cb.value);
+        regenerateRoutine(r);
+      } 
+      else if (!taskId && recurrence !== 'none') {
+        const newRoutine = {
+          id: 'r' + Date.now(),
+          desc: baseTask.desc, startDate: baseTask.date, time: baseTask.time,
+          prio: baseTask.prio, categoryId: baseTask.categoryId,
+          type: recurrence, days: Array.from(document.querySelectorAll('.day-check:checked')).map(cb => cb.value)
+        };
+        appData.routines.push(newRoutine);
+        projectRoutines();
+        saveLocal();
+      } 
+      else {
+        if(taskId) appData.tasks = appData.tasks.filter(x => x.id !== taskId);
+        appData.tasks.push({ ...baseTask, id: taskId || ('t'+Date.now()), done: taskId ? appData.tasks.find(x => x.id === taskId).done : false });
+        saveLocal();
+      }
+      
+      document.getElementById('task-modal').style.display = 'none';
+      
+      if(!routineEditId && recurrence === 'none') {
+        const savedDateObj = new Date(date + 'T12:00:00');
+        currentMonday = getMonday(savedDateObj);
+        currentDayIndex = savedDateObj.getDay() === 0 ? 6 : savedDateObj.getDay() - 1;
+        scrollToDay(currentDayIndex);
+      }
+    }
+
+    function updateCategorySelects() {
+      document.getElementById('task-cat').innerHTML = '<option value="">Sem Categoria</option>' + appData.categories.map(c => `<option value="${c.id}">${c.name}</option>`).join('');
+      document.getElementById('cat-list').innerHTML = appData.categories.map(c => `
+        <div style="display:flex; justify-content:space-between; padding:5px; border-bottom:1px solid var(--border);">
+          <span style="color:${c.color}; font-weight:bold;">${c.name}</span><button class="btn-icon" onclick="deleteCategory('${c.id}')" style="color:var(--red);">🗑️</button>
+        </div>`).join('');
+    }
+    function addCategory() {
+      const name = document.getElementById('new-cat-name').value, color = document.getElementById('new-cat-color').value;
+      if(name) { appData.categories.push({ id: 'c'+Date.now(), name, color }); document.getElementById('new-cat-name').value = ''; saveLocal(); }
+    }
+    function deleteCategory(id) { if(confirm("Remover?")) { appData.categories = appData.categories.filter(c => c.id !== id); appData.tasks.forEach(t => { if(t.categoryId === id) t.categoryId = ''; }); saveLocal(); } }
+    function openSettings() { updateCategorySelects(); document.getElementById('settings-modal').style.display = 'flex'; }
+    
+    // --- NAVEGAÇÃO E SWIPE ---
+    const board = document.getElementById('board');
+    board.addEventListener('scroll', () => { 
+      const colWidth = board.offsetWidth; 
+      currentDayIndex = Math.round(board.scrollLeft / colWidth); 
+      document.querySelectorAll('.day-tab').forEach((t, i) => t.classList.toggle('active', i === currentDayIndex)); 
+    });
+    function scrollToDay(index) { 
+      currentDayIndex = index; 
+      board.scrollTo({ left: index * board.offsetWidth, behavior: 'smooth' }); 
+      document.querySelectorAll('.day-tab').forEach((t, i) => t.classList.toggle('active', i === index)); 
+    }
+
+    // --- PWA INSTALL ---
+    let deferredPrompt;
+    window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); deferredPrompt = e; document.getElementById('install-banner').style.display = 'flex'; });
+    document.getElementById('btn-install-app').addEventListener('click', async () => { if (deferredPrompt) { deferredPrompt.prompt(); const { outcome } = await deferredPrompt.userChoice; if (outcome === 'accepted') document.getElementById('install-banner').style.display = 'none'; deferredPrompt = null; } });
+    window.addEventListener('appinstalled', () => { document.getElementById('install-banner').style.display = 'none'; });
+
+    // --- INIT ---
+    initData();
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js').then(r => r.update());
+    scrollToDay(currentDayIndex);
+  </script>
+</body>
+</html>
